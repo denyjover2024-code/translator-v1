@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1F6F78">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Salita Live">
+<title>Salita Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column. Controls, mic, then two panes (heard / translated), then saved notes. */
+:root {
+  --bg: #EDF2F3; --surface: #FFFFFF; --surface-2: #E4ECEE; --ink: #11252C; --muted: #566D75;
+  --line: #CFDBDE; --accent: #1F6F78; --accent-ink: #FFFFFF; --rec: #D8412F; --rec-ink: #FFFFFF; --danger: #B3261E; --mark: #FFE98A;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0D1A1E; --surface: #14262C; --surface-2: #1B3138; --ink: #E6EFF1; --muted: #8FA6AD;
+    --line: #26404A; --accent: #5CC0CB; --accent-ink: #072126; --rec: #FF6B57; --rec-ink: #2A0A06; --danger: #FF8A80; --mark: #7A6410;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(48px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2 { font-family: var(--font-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 30px; line-height: 1.1; }
+h2 { font-size: 18px; }
+.sub { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.langs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.label, .field label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+select { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 0 10px; width: 100%; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; }
+.btn.danger { color: var(--danger); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.mic { display: inline-flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 28px; border: 0; border-radius: 999px; background: var(--rec); color: var(--rec-ink); font-family: var(--font-display); font-weight: 700; font-size: 20px; cursor: pointer; }
+.mic .dot { width: 16px; height: 16px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 30%, transparent); }
+.mic.live .dot { border-radius: 4px; }
+.timer { font-family: var(--font-mono); font-size: 14px; color: var(--muted); min-height: 21px; }
+.timer.live { color: var(--rec); }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.status { margin: 0; min-height: 22px; font-size: 14px; color: var(--muted); }
+.status.err { color: var(--danger); }
+
+.panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .panes, .langs { grid-template-columns: minmax(0, 1fr); } }
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.heard { width: 100%; min-height: 150px; resize: vertical; border: 0; background: transparent; padding: 0; font-size: 18px; line-height: 1.45; }
+.heard:focus { outline: none; }
+.live { min-height: 22px; color: var(--muted); font-style: italic; font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+.said { font-family: var(--font-display); font-size: 20px; line-height: 1.4; margin: 0; min-height: 150px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.placeholder { color: var(--muted); }
+
+.list { display: flex; flex-direction: column; gap: 12px; }
+.list-head { display: flex; align-items: baseline; justify-content: space-between; }
+.count { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.empty { border: 1px dashed var(--line); border-radius: 14px; padding: 22px 18px; color: var(--muted); text-align: center; font-size: 15px; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.note-title { width: 100%; border: 0; border-bottom: 1px dashed var(--line); background: transparent; padding: 4px 0; font-family: var(--font-display); font-weight: 600; font-size: 17px; min-width: 0; }
+.note-title:focus { border-bottom-color: var(--accent); outline: none; }
+.meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+audio { width: 100%; height: 40px; }
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.col p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mic.live .dot { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 9px color-mix(in srgb, currentColor 10%, transparent); } }
+}
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body { min-height: 100vh; min-height: 100dvh; }
+.notice { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.notice[hidden] { display: none; }
+@media (max-width: 560px) {
+  h1 { font-size: 26px; }
+  .stage { padding: 16px; }
+  .mic { width: 100%; justify-content: center; min-height: 68px; }
+  .heard, .said { min-height: 120px; }
+  select, .btn { min-height: 48px; }
+  .btn.small { min-height: 44px; flex: 1 1 auto; }
+  textarea, select, input { font-size: 16px; }
+}
+.digest { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.digest[hidden] { display: none; }
+.digest p { margin: 0; overflow-wrap: anywhere; }
+.digest ul { margin: 0; padding-left: 20px; }
+.digest li { margin-bottom: 8px; overflow-wrap: anywhere; }
+.digest .tr { color: var(--accent); font-size: 14px; }
+.digest .fine { color: var(--muted); font-size: 13px; }
+mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Salita Live</h1>
+    <p class="sub">Record, transcribe and translate while you speak.</p>
+  </header>
+
+  <div class="notice" id="notice" hidden>Opened from your files? Phones often block the microphone for local files. Upload this file to a free https host (Netlify Drop or GitHub Pages work) and open that link instead.</div>
+
+  <div class="langs">
+    <div class="field"><label for="speak-lang">I speak</label><select id="speak-lang"></select></div>
+    <div class="field"><label for="target-lang">Translate to</label><select id="target-lang"></select></div>
+  </div>
+
+  <section class="stage" aria-label="Recorder">
+    <button class="mic" id="mic" type="button"><span class="dot" aria-hidden="true"></span><span id="mic-text">Start recording</span></button>
+    <div class="timer" id="timer" aria-live="off">0:00</div>
+    <label class="toggle"><input type="checkbox" id="saveaudio"> Also save the audio</label>
+    <label class="toggle"><input type="checkbox" id="autospeak"> Read translations aloud (use headphones)</label>
+    <p class="status" id="status" role="status"></p>
+  </section>
+
+  <section class="panes" aria-label="Transcript and translation">
+    <div class="pane">
+      <span class="label">Heard</span>
+      <textarea class="heard" id="heard" placeholder="Speech appears here as you talk. You can also type or edit."></textarea>
+      <p class="live" id="live"></p>
+    </div>
+    <div class="pane">
+      <span class="label">Translation</span>
+      <p class="said" id="said"><span class="placeholder">The translation appears here.</span></p>
+      <div class="row">
+        <button class="btn small primary" id="translate" type="button">Translate text</button>
+        <button class="btn small" id="speak" type="button">Speak</button>
+        <button class="btn small" id="copy" type="button">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="list" aria-label="Saved notes">
+    <div class="list-head"><h2>Saved notes</h2><span class="count" id="count"></span></div>
+    <div class="list" id="notes"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+
+  /* label, speech-recognition code (null = not supported), MyMemory code, speech-synthesis code */
+  const LANGS = [
+    ['English', 'en-US', 'en', 'en'], ['Filipino (Tagalog)', 'fil-PH', 'tl', 'fil'], ['Cebuano', null, 'ceb', 'ceb'],
+    ['Ilocano', null, 'ilo', 'ilo'], ['Spanish', 'es-ES', 'es', 'es'], ['Japanese', 'ja-JP', 'ja', 'ja'],
+    ['Korean', 'ko-KR', 'ko', 'ko'], ['Chinese (Simplified)', 'zh-CN', 'zh-CN', 'zh'], ['French', 'fr-FR', 'fr', 'fr'],
+    ['German', 'de-DE', 'de', 'de'], ['Portuguese', 'pt-BR', 'pt-BR', 'pt'], ['Italian', 'it-IT', 'it', 'it'],
+    ['Indonesian', 'id-ID', 'id', 'id'], ['Vietnamese', 'vi-VN', 'vi', 'vi'], ['Thai', 'th-TH', 'th', 'th'],
+    ['Hindi', 'hi-IN', 'hi', 'hi'], ['Arabic', 'ar-SA', 'ar', 'ar'], ['Russian', 'ru-RU', 'ru', 'ru'],
+  ];
+  const speakSel = $('#speak-lang'), targetSel = $('#target-lang');
+  LANGS.forEach((l, i) => {
+    if (l[1]) speakSel.append(new Option(l[0], i));
+    targetSel.append(new Option(l[0], i));
+  });
+  speakSel.value = 0;
+  targetSel.value = 1;
+  const speakLang = () => LANGS[+speakSel.value];
+  const targetLang = () => LANGS[+targetSel.value];
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function setStatus(msg, err) { const s = $('#status'); s.textContent = msg || ''; s.className = 'status' + (err ? ' err' : ''); }
+  const fmtDur = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  const fmtSize = (b) => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+  const fmtDate = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const decoder = document.createElement('textarea');
+  const decode = (s) => { decoder.innerHTML = s; return decoder.value; };
+
+  /* ---------- Translation (MyMemory, called from this browser) ---------- */
+  function chunks(text, max) {
+    const parts = text.match(/[^.!?。！？\n]+[.!?。！？]*\s*/g) || [text];
+    const out = []; let cur = '';
+    for (const p of parts) {
+      if ((cur + p).length > max && cur) { out.push(cur.trim()); cur = ''; }
+      cur += p;
+      while (cur.length > max) { out.push(cur.slice(0, max)); cur = cur.slice(max); }
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  async function translateText(text, fromCode, toCode) {
+    text = text.trim();
+    if (!text) return '';
+    if (fromCode === toCode) return text;
+    const done = [];
+    for (const c of chunks(text, 400)) {
+      const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(c) + '&langpair=' + encodeURIComponent(fromCode + '|' + toCode);
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('http ' + r.status);
+      const j = await r.json();
+      if (+j.responseStatus !== 200) throw new Error(j.responseDetails || 'translation failed');
+      done.push(decode(j.responseData.translatedText));
+    }
+    return done.join(' ');
+  }
+
+  /* ---------- Live state ---------- */
+  const heard = $('#heard'), live = $('#live'), said = $('#said');
+  let segs = [];            // [{out}] translated pieces in order
+  let livePieces = [];      // finished speech segments, kept for the summary
+  let chain = Promise.resolve();
+  function renderOut() {
+    const t = segs.map((s) => s.out).join(' ').trim();
+    said.textContent = '';
+    if (t) said.textContent = t; else said.append(el('span', 'placeholder', 'The translation appears here.'));
+  }
+  const outText = () => segs.map((s) => s.out).join(' ').trim();
+
+  function queueTranslate(text) {
+    const seg = { out: '…' };
+    segs.push(seg); renderOut();
+    const from = speakLang()[2], to = targetLang()[2];
+    chain = chain.then(async () => {
+      try {
+        seg.out = await translateText(text, from, to);
+        if ($('#autospeak').checked) speak(seg.out);
+      } catch (e) {
+        seg.out = '[not translated]';
+        setStatus('Translation needs an internet connection. Try again in a moment.', true);
+      }
+      renderOut();
+    });
+  }
+
+  $('#translate').onclick = () => {
+    const text = heard.value.trim();
+    if (!text) { setStatus('Type or speak something first.', true); return; }
+    setStatus('');
+    segs = []; chain = Promise.resolve();
+    queueTranslate(text);
+  };
+
+  $('#copy').onclick = async () => {
+    const t = outText();
+    if (!t) return;
+    try { await navigator.clipboard.writeText(t); setStatus('Copied.'); }
+    catch (e) { setStatus('Select the translation and copy it.', true); }
+  };
+
+  /* ---------- Speech output ---------- */
+  function voiceFor(l) {
+    if (!('speechSynthesis' in window)) return null;
+    const code = l[3];
+    return speechSynthesis.getVoices().find((v) => {
+      const x = v.lang.toLowerCase().replace('_', '-');
+      return code === 'fil' ? (x.startsWith('fil') || x.startsWith('tl')) : x.startsWith(code);
+    }) || null;
+  }
+  function speak(text) {
+    if (!text || !('speechSynthesis' in window)) return;
+    const v = voiceFor(targetLang());
+    const u = new SpeechSynthesisUtterance(text);
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = targetLang()[1] || targetLang()[3];
+    speechSynthesis.speak(u);
+  }
+  $('#speak').onclick = () => { speechSynthesis.cancel(); speak(outText()); };
+  if (!('speechSynthesis' in window)) { $('#speak').hidden = true; $('#autospeak').closest('label').hidden = true; }
+
+  /* ---------- Recording + live recognition ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let wake = null;
+  const isPhone = window.matchMedia('(pointer: coarse)').matches;
+  $('#saveaudio').checked = !isPhone;     /* phones often cannot record and transcribe at once */
+  if (location.protocol === 'file:' || !window.isSecureContext) $('#notice').hidden = false;
+  let recording = false, stream = null, mr = null, parts = [], sr = null, startedAt = 0, tick = null, mime = '';
+
+  function pickMime() {
+    if (!window.MediaRecorder) return '';
+    return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  }
+
+  function startRecognition() {
+    if (!SR) { setStatus('Live transcription needs Chrome, Edge or Safari. Audio is still being recorded.', true); return; }
+    sr = new SR();
+    sr.lang = speakLang()[1];
+    sr.continuous = true;
+    sr.interimResults = true;
+    sr.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i], t = r[0].transcript;
+        if (r.isFinal) {
+          const clean = t.trim();
+          if (clean) { heard.value = (heard.value.trim() + ' ' + clean).trim(); livePieces.push(clean); queueTranslate(clean); }
+        } else interim += t;
+      }
+      live.textContent = interim;
+    };
+    sr.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { setStatus('Speech recognition was blocked. Allow the microphone and speech services, then try again.', true); recording && stopRecording(); }
+      else if (e.error === 'network') setStatus('Live transcription needs an internet connection.', true);
+    };
+    sr.onend = () => { live.textContent = ''; if (recording) { try { sr.start(); } catch (e) {} } };
+    try { sr.start(); } catch (e) {}
+  }
+
+  async function startRecording() {
+    setStatus('');
+    const wantAudio = $('#saveaudio').checked || !SR;
+    stream = null; mr = null;
+    if (wantAudio) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        setStatus('Microphone access was blocked. Allow it in your browser settings, then try again. Opening this page from an https link helps.', true);
+        return;
+      }
+    }
+    heard.value = ''; live.textContent = ''; livePieces = []; segs = []; chain = Promise.resolve(); renderOut();
+    parts = []; mime = pickMime();
+    if (stream) {
+      try {
+        mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        mr.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+        mr.start(1000);
+      } catch (e) { mr = null; }
+      if (isPhone && SR) setStatus('If the transcript stays empty on your phone, turn off Also save the audio.');
+    }
+    try { wake = navigator.wakeLock ? await navigator.wakeLock.request('screen') : null; } catch (e) { wake = null; }
+    recording = true; startedAt = Date.now();
+    $('#mic').classList.add('live'); $('#mic-text').textContent = 'Stop and save';
+    $('#timer').classList.add('live');
+    tick = setInterval(() => { $('#timer').textContent = fmtDur((Date.now() - startedAt) / 1000); }, 500);
+    startRecognition();
+  }
+
+  async function stopRecording() {
+    if (!recording) return;
+    recording = false;
+    clearInterval(tick);
+    const dur = (Date.now() - startedAt) / 1000;
+    $('#mic').classList.remove('live'); $('#mic-text').textContent = 'Start recording';
+    $('#timer').classList.remove('live'); $('#timer').textContent = fmtDur(dur);
+    try { sr && sr.stop(); } catch (e) {}
+    try { wake && wake.release(); } catch (e) {}
+    wake = null;
+    live.textContent = '';
+    const blob = await new Promise((res) => {
+      if (!mr || mr.state === 'inactive') return res(parts.length ? new Blob(parts, { type: mime || 'audio/webm' }) : null);
+      mr.onstop = () => res(parts.length ? new Blob(parts, { type: mr.mimeType || mime || 'audio/webm' }) : null);
+      mr.stop();
+    });
+    stream && stream.getTracks().forEach((t) => t.stop());
+    await chain;
+    const note = {
+      id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: 'Note ' + (notes.length + 1), created: Date.now(), duration: dur, blob,
+      src: heard.value.trim(), pieces: livePieces.slice(), out: outText(), from: speakLang()[0], to: targetLang()[0],
+    };
+    if (!blob && !note.src) { setStatus('Nothing was captured.', true); return; }
+    notes.unshift(note); dbPut(note); renderNotes();
+    setStatus('Saved.');
+  }
+
+  $('#mic').onclick = () => (recording ? stopRecording() : startRecording());
+  if (!SR && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { $('#mic').disabled = true; setStatus('This browser cannot access the microphone.', true); }
+  /* Keep the screen awake while recording; re-acquire after the page returns to the foreground. */
+  document.addEventListener('visibilitychange', async () => {
+    if (recording && !document.hidden) {
+      try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+      if (sr) { try { sr.start(); } catch (e) {} }
+    }
+  });
+
+  /* ---------- Saved notes ---------- */
+  const notes = [];
+  let dbp = null;
+  function openDB() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      try { const r = indexedDB.open('salita-live', 1); r.onupgradeneeded = () => r.result.createObjectStore('notes', { keyPath: 'id' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); }
+    });
+    return dbp;
+  }
+  async function dbAll() { try { const db = await openDB(); return await new Promise((res, rej) => { const q = db.transaction('notes').objectStore('notes').getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } catch (e) { return []; } }
+  async function dbPut(n) { try { const db = await openDB(); const { url, ...rest } = n; db.transaction('notes', 'readwrite').objectStore('notes').put(rest); } catch (e) {} }
+  async function dbDel(id) { try { const db = await openDB(); db.transaction('notes', 'readwrite').objectStore('notes').delete(id); } catch (e) {} }
+
+  /* ---------- Highlights, summary and Word export ---------- */
+  const STOP = new Set(('the and for that this with you your are was were have has had not but they their them from will would there what when which who how can could should about into than then also just like very been being its our out all any some more most one two get got say said yes no ' +
+    'ang ng sa na at ay mga ko mo niya namin natin ito iyon iyan para kung pero din rin po ba lang naman yung si ni kay may mayroon ako ikaw siya kami tayo kayo sila ito dito doon pag kasi hindi oo ' +
+    'que los las una por con para como pero este esta ese eso del les des une est pas pour dans qui der die das und ist nicht ein eine').split(' '));
+  const CJK = /[぀-ヿ一-鿿가-힯฀-๿]/;
+
+  function getSentences(n) {
+    const base = (n.pieces && n.pieces.length && n.pieces.join(' ').trim() === n.src) ? n.pieces : [n.src];
+    const out = [];
+    base.forEach((p) => (p.match(/[^.!?。！？\n]+[.!?。！？]*/g) || [p]).forEach((s) => { s = s.trim(); if (s) out.push(s); }));
+    return out;
+  }
+  function tokens(s) {
+    const low = s.toLowerCase();
+    if (CJK.test(low)) {
+      const c = low.replace(/[\s\p{P}]+/gu, ''); const t = [];
+      for (let i = 0; i < c.length - 1; i++) t.push(c.slice(i, i + 2));
+      return t;
+    }
+    return (low.match(/[\p{L}\p{N}']+/gu) || []).filter((w) => w.length > 2 && !STOP.has(w));
+  }
+  function makeDigest(n) {
+    const sents = getSentences(n);
+    const toks = sents.map(tokens);
+    const freq = new Map();
+    toks.forEach((t) => t.forEach((w) => freq.set(w, (freq.get(w) || 0) + 1)));
+    const scores = toks.map((t, i) => {
+      if (!t.length) return 0;
+      let s = 0; t.forEach((w) => { s += freq.get(w); });
+      let sc = s / Math.pow(t.length, 0.7);
+      if (/\d/.test(sents[i])) sc *= 1.1;
+      return sc;
+    });
+    const rank = scores.map((_, i) => i).sort((a, b) => scores[b] - scores[a]);
+    const hk = Math.min(sents.length, Math.max(1, Math.min(5, Math.round(sents.length / 3))));
+    const sk = Math.min(sents.length, Math.max(1, Math.min(3, Math.ceil(sents.length / 4))));
+    const hi = rank.slice(0, hk).sort((a, b) => a - b);
+    const si = rank.slice(0, sk).sort((a, b) => a - b);
+    const terms = CJK.test(n.src) ? [] : [...freq.entries()].filter((e) => e[1] > 1).sort((a, b) => b[1] - a[1]).slice(0, 6).map((e) => e[0]);
+    return { sents, hi, summary: si.map((i) => sents[i]).join(' '), highlights: hi.map((i) => sents[i]), terms, translated: false };
+  }
+  function digestOf(n) {
+    if (!n.digest || n.digest.sents.join(' ') !== getSentences(n).join(' ')) n.digest = makeDigest(n);
+    return n.digest;
+  }
+  function langCode(label) { const l = LANGS.find((x) => x[0] === label); return l ? l[2] : null; }
+  async function translateDigest(n, d) {
+    const from = langCode(n.from), to = langCode(n.to);
+    if (!from || !to) return;
+    d.summaryOut = await translateText(d.summary, from, to);
+    d.highlightsOut = [];
+    for (const h of d.highlights) d.highlightsOut.push(await translateText(h, from, to));
+    d.translated = true;
+    dbPut(n);
+  }
+  function paintDigest(n, d, dg) {
+    dg.textContent = '';
+    dg.append(el('span', 'label', 'Summary'), el('p', null, d.summary));
+    if (d.summaryOut) dg.append(el('p', 'tr', d.summaryOut));
+    dg.append(el('span', 'label', 'Highlights'));
+    const ul = el('ul');
+    d.highlights.forEach((h, i) => {
+      const li = el('li'); const m = el('mark', null, h); li.append(m);
+      if (d.highlightsOut && d.highlightsOut[i]) { li.append(document.createElement('br'), el('span', 'tr', d.highlightsOut[i])); }
+      ul.append(li);
+    });
+    dg.append(ul);
+    if (d.terms.length) dg.append(el('span', 'label', 'Key terms'), el('p', null, d.terms.join(', ')));
+    dg.append(el('span', 'label', 'Transcript with highlights'));
+    const full = el('p'); const set = new Set(d.hi);
+    d.sents.forEach((s, i) => { full.append(set.has(i) ? el('mark', null, s) : document.createTextNode(s), document.createTextNode(' ')); });
+    dg.append(full);
+    dg.append(el('p', 'fine', 'The summary and highlights pick the most representative sentences from your transcript.'));
+  }
+  async function buildDigest(n, dg) {
+    const d = digestOf(n);
+    paintDigest(n, d, dg);
+    if (!d.translated) { try { await translateDigest(n, d); paintDigest(n, d, dg); } catch (e) {} }
+  }
+  function saveBlob(blob, name) {
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = u; a.download = name; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 3000);
+  }
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  async function exportWord(n) {
+    if (!n.src) { setStatus('There is no transcript to export.', true); return; }
+    const d = digestOf(n);
+    if (!d.translated) { try { await translateDigest(n, d); } catch (e) {} }
+    const base = (n.name || '').replace(/[^\w\- ]+/g, '').trim() || 'Salita note';
+    const hiSet = new Set(d.hi);
+    const meta = fmtDate(n.created) + '  ·  ' + fmtDur(n.duration) + '  ·  ' + n.from + ' → ' + n.to;
+    if (window.docx) {
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel } = window.docx;
+      const P = (text, o) => new Paragraph({ spacing: { after: 120 }, children: [new TextRun(Object.assign({ text }, o || {}))] });
+      const H = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_1, spacing: { before: 280, after: 120 } });
+      const kids = [new Paragraph({ text: n.name, heading: HeadingLevel.TITLE }), P(meta, { color: '666666', size: 20 }), H('Summary'), P(d.summary)];
+      if (d.summaryOut) kids.push(P(d.summaryOut, { italics: true, color: '1F6F78' }));
+      kids.push(H('Highlights'));
+      d.highlights.forEach((h, i) => {
+        kids.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: h, highlight: 'yellow' })] }));
+        if (d.highlightsOut && d.highlightsOut[i]) kids.push(new Paragraph({ indent: { left: 720 }, spacing: { after: 120 }, children: [new TextRun({ text: d.highlightsOut[i], italics: true, color: '1F6F78', size: 21 })] }));
+      });
+      if (d.terms.length) kids.push(H('Key terms'), P(d.terms.join(', ')));
+      kids.push(H('Full transcript (' + n.from + ')'));
+      kids.push(new Paragraph({ spacing: { after: 120 }, children: d.sents.map((s, i) => new TextRun(hiSet.has(i) ? { text: s + ' ', highlight: 'yellow' } : { text: s + ' ' })) }));
+      kids.push(H('Full translation (' + n.to + ')'), P(n.out || ''));
+      const doc = new Document({ creator: 'Salita Live', title: n.name, styles: { default: { document: { run: { font: 'Calibri', size: 23 } } } }, sections: [{ children: kids }] });
+      saveBlob(await Packer.toBlob(doc), base + '.docx');
+      setStatus('Word file saved.');
+    } else {
+      /* Word opens this HTML as a document when the library could not load. */
+      let h = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>' + esc(n.name) + '</title></head><body style="font-family:Calibri,sans-serif">';
+      h += '<h1>' + esc(n.name) + '</h1><p style="color:#666">' + esc(meta) + '</p><h2>Summary</h2><p>' + esc(d.summary) + '</p>';
+      if (d.summaryOut) h += '<p><i>' + esc(d.summaryOut) + '</i></p>';
+      h += '<h2>Highlights</h2><ul>' + d.highlights.map((x, i) => '<li><span style="background:yellow">' + esc(x) + '</span>' + (d.highlightsOut && d.highlightsOut[i] ? '<br><i>' + esc(d.highlightsOut[i]) + '</i>' : '') + '</li>').join('') + '</ul>';
+      if (d.terms.length) h += '<h2>Key terms</h2><p>' + esc(d.terms.join(', ')) + '</p>';
+      h += '<h2>Full transcript (' + esc(n.from) + ')</h2><p>' + d.sents.map((s, i) => hiSet.has(i) ? '<span style="background:yellow">' + esc(s) + '</span>' : esc(s)).join(' ') + '</p>';
+      h += '<h2>Full translation (' + esc(n.to) + ')</h2><p>' + esc(n.out || '') + '</p></body></html>';
+      saveBlob(new Blob(['﻿', h], { type: 'application/msword' }), base + '.doc');
+      setStatus('Word file saved. It opens in Word as a .doc file.');
+    }
+  }
+
+  function extFor(b) { const t = (b.type || '').toLowerCase(); return t.includes('mp4') ? 'm4a' : t.includes('ogg') ? 'ogg' : 'webm'; }
+
+  function renderNotes() {
+    const box = $('#notes');
+    box.textContent = '';
+    $('#count').textContent = notes.length ? notes.length + (notes.length === 1 ? ' note' : ' notes') : '';
+    if (!notes.length) { box.append(el('div', 'empty', 'Nothing saved yet. Press Start recording, speak, then Stop and save.')); return; }
+    notes.forEach((n) => {
+      const card = el('div', 'note');
+      const title = el('input', 'note-title');
+      title.id = 'title-' + n.id; title.value = n.name; title.setAttribute('aria-label', 'Note title');
+      title.onchange = () => { n.name = title.value.trim() || 'Untitled note'; title.value = n.name; dbPut(n); };
+      const meta = el('div', 'meta');
+      meta.append(el('span', null, fmtDate(n.created)), el('span', null, fmtDur(n.duration)), el('span', null, n.from + ' → ' + n.to));
+      if (n.blob) meta.append(el('span', null, fmtSize(n.blob.size)));
+      card.append(title, meta);
+      if (n.blob) {
+        if (!n.url) n.url = URL.createObjectURL(n.blob);
+        const a = document.createElement('audio'); a.controls = true; a.preload = 'metadata'; a.src = n.url; card.append(a);
+      }
+      const cols = el('div', 'cols');
+      const c1 = el('div', 'col'); c1.append(el('span', 'label', 'Heard'), el('p', null, n.src || '—'));
+      const c2 = el('div', 'col'); c2.append(el('span', 'label', 'Translation'), el('p', null, n.out || '—'));
+      cols.append(c1, c2); card.append(cols);
+
+      const dg = el('div', 'digest'); dg.hidden = true;
+      const hs = el('button', 'btn small primary', 'Highlights & summary'); hs.type = 'button';
+      hs.onclick = async () => {
+        if (!dg.hidden) { dg.hidden = true; return; }
+        dg.hidden = false;
+        if (!n.src) { dg.textContent = 'There is no transcript to summarize.'; return; }
+        await buildDigest(n, dg);
+      };
+      const wd = el('button', 'btn small primary', 'Export to Word'); wd.type = 'button';
+      wd.onclick = async () => {
+        wd.disabled = true; wd.textContent = 'Preparing…';
+        try { await exportWord(n); } catch (e) { setStatus('Could not build the Word file.', true); }
+        wd.disabled = false; wd.textContent = 'Export to Word';
+      };
+      card.append(dg);
+      const row = el('div', 'row');
+      const sp = el('button', 'btn small', 'Speak'); sp.type = 'button';
+      sp.onclick = () => { const l = LANGS.find((x) => x[0] === n.to); if (l) { const prev = targetSel.value; targetSel.value = LANGS.indexOf(l); speechSynthesis.cancel(); speak(n.out); targetSel.value = prev; } };
+      if (!('speechSynthesis' in window)) sp.hidden = true;
+      const tx = el('button', 'btn small', 'Save text'); tx.type = 'button';
+      tx.onclick = () => {
+        const body = n.name + '\n' + fmtDate(n.created) + '\n\n' + n.from + ':\n' + n.src + '\n\n' + n.to + ':\n' + n.out + '\n';
+        const u = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
+        const a = document.createElement('a'); a.href = u; a.download = n.name.replace(/[^\w\- ]+/g, '') + '.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(u), 2000);
+      };
+      row.append(hs, wd, sp, tx);
+      if (n.blob) {
+        const dl = el('button', 'btn small', 'Save audio'); dl.type = 'button';
+        dl.onclick = () => { const a = document.createElement('a'); a.href = n.url; a.download = n.name.replace(/[^\w\- ]+/g, '') + '.' + extFor(n.blob); a.click(); };
+        row.append(dl);
+      }
+      const del = el('button', 'btn small danger', 'Delete'); del.type = 'button';
+      let armed = false;
+      del.onclick = () => {
+        if (!armed) { armed = true; del.textContent = 'Delete for good?'; setTimeout(() => { armed = false; del.textContent = 'Delete'; }, 3500); return; }
+        if (n.url) URL.revokeObjectURL(n.url);
+        notes.splice(notes.indexOf(n), 1); dbDel(n.id); renderNotes();
+      };
+      row.append(del);
+      card.append(row);
+      box.append(card);
+    });
+  }
+  renderNotes();
+  dbAll().then((all) => { all.sort((a, b) => b.created - a.created).forEach((n) => notes.push(n)); renderNotes(); });
+
+  window.addEventListener('beforeunload', (e) => { if (recording) { e.preventDefault(); e.returnValue = ''; } });
+
+  if (!SR) setStatus('Your browser has no live speech recognition. You can still record audio and translate typed text. Chrome, Edge and Safari support live transcription.');
+})();
+</script>
+</body>
+</html>
